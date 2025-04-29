@@ -14,3 +14,8 @@ variable "environment" {
   description = "Deployment environment (e.g., dev, uat, prod)"
   type        = string
 }
+variable "force_destroy" {
+  description = "Allow bucket deletion with objects"
+  type        = bool
+  default     = false
+}
