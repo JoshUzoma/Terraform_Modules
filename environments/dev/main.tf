@@ -6,3 +6,12 @@ module "sp_dccc_s3_bucket" {
   environment   = "dev"
   force_destroy = true
 }
+
+module "tf_backend" {
+  source              = "../../modules/tf_backend"
+  company             = "sp"
+  team                = "dccc"
+  name                = "tfstate"
+  environment         = "shared"    # Backend shared across all envs
+  region              = "us-east-2"
+}
