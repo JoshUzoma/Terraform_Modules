@@ -1,17 +1,22 @@
-module "sp_dccc_s3_bucket" {
-  source        = "../../modules/s3"
-  company       = "sp"
-  team          = "dccc"
-  name          = "example-bucket-56689"
-  environment   = "dev"
-  force_destroy = true
+terraform {
+  required_version = ">= 1.3.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+provider "aws" {
+  region = "us-east-2"
+}
+resource "aws_s3_bucket" "insecure_bucket" {
+  bucket = "my-insecure-bucket-dev"
+}
+resource "aws_s3_bucket_acl" "s3" {
+  bucket = aws_s3_bucket.insecure_bucket.id
+  acl    = "public-read"
 }
 
-module "tf_backend" {
-  source              = "../../modules/tf_backend"
-  company             = "sp"
-  team                = "dccc"
-  name                = "tfstate"
-  environment         = "shared"    # Backend shared across all envs
-  region              = "us-east-2"
-}
+
+
