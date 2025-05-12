@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: "us-east-2"
-      S3_BUCKET: "tfsec-logs-bucket"
+      S3_BUCKET: "tfsec-dev-bucket"
       
     defaults:
       run:
