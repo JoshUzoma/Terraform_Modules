@@ -1,3 +1,6 @@
+provider "aws" {
+  region = "us-east-2"
+
 terraform {
   required_version = ">= 1.3.0"
   required_providers {
@@ -6,6 +9,7 @@ terraform {
       version = "~> 5.0"
     }
   }
+
 }
 provider "aws" {
   region = "us-east-2"
@@ -18,5 +22,9 @@ resource "aws_s3_bucket_acl" "s3" {
   acl    = "public-read"
 }
 
-
+resource "null_resource" "test" {
+  provisioner "local-exec" {
+    command = "echo 'Testing remote backend...'"
+  }
+}
 
