@@ -1,21 +1,42 @@
-variable "company" {
-  description = "Company prefix (e.g., sp)"
+variable "aws_region" {
+  description = "AWS region"
   type        = string
 }
-variable "team" {
-  description = "Team name (e.g., dccc)"
-  type        = string
-}
-variable "name" {
-  description = "Resource-specific name (e.g., vpc, lambda, s3-etl)"
-  type        = string
-}
-variable "environment" {
-  description = "Deployment environment (e.g., dev, uat, prod)"
-  type        = string
-}
-variable "force_destroy" {
-  description = "Allow bucket deletion with objects"
+
+variable "enable_versioning" {
+  description = "Enable versioning on the S3 bucket"
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "sse_algorithm" {
+  description = "Server-side encryption algorithm (e.g., AES256 or aws:kms)"
+  type        = string
+  default     = "AES256"
+}
+
+variable "tags" {
+  description = "Tags to apply to the S3 bucket"
+  type        = map(string)
+  default     = {}
+}
+
+variable "organization" {
+  description = "Company or organization prefix"
+  type        = string
+}
+
+variable "team" {
+  description = "Team or project name"
+  type        = string
+}
+variable "env" {
+  description = "Deployment environment (dev, uat, prod)"
+  type        = string
+}
+
+variable "resource_type" {
+  description = "Type of resource (e.g., s3, rds, ec2)"
+  type        = string
+  default     = "s3"
 }
