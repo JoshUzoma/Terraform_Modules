@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 provider "aws" {
   region = "us-east-2"
 
@@ -28,3 +29,5 @@ resource "null_resource" "test" {
   }
 }
 
+=======
+>>>>>>> aed1ed3 (changes to remote backend)
