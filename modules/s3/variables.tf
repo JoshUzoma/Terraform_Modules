@@ -2,6 +2,7 @@ variable "aws_region" {
   description = "AWS region"
   type        = string
 }
+# when we move to govcloud default region could change "us-gov-west-1"
 
 variable "enable_versioning" {
   description = "Enable versioning on the S3 bucket"
@@ -15,6 +16,7 @@ variable "sse_algorithm" {
   default     = "AES256"
 }
 
+# will add tags that was brought up in DSO meeting
 variable "tags" {
   description = "Tags to apply to the S3 bucket"
   type        = map(string)
