@@ -1,5 +1,5 @@
 module "iam_roles" {
-  source = "../modules/IAM"
+  source = "../modules/iam"
 
   for_each = var.iam_roles
 

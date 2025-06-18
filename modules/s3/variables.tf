@@ -16,13 +16,6 @@ variable "sse_algorithm" {
   default     = "AES256"
 }
 
-# will add tags that was brought up in DSO meeting
-variable "tags" {
-  description = "Tags to apply to the S3 bucket"
-  type        = map(string)
-  default     = {}
-}
-
 variable "organization" {
   description = "Company or organization prefix"
   type        = string
@@ -41,4 +34,9 @@ variable "resource_type" {
   description = "Type of resource (e.g., s3, rds, ec2)"
   type        = string
   default     = "s3"
+}
+
+variable "purpose" {
+  description = "The functional purpose of the bucket"
+  type        = string
 }

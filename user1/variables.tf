@@ -12,12 +12,6 @@ variable "sse_algorithm" {
     description = "encrypt s3 data"
     type = string
 }
-#add tags here
-variable "tags" {
-    description = "maps of tags"
-    type        = map(string)
-    default     = {}
-}
 
 variable "organization" {
   description = "Company or organization prefix"
