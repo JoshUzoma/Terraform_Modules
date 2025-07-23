@@ -4,21 +4,19 @@ variable "aws_region" {
 }
 
 variable "enable_versioning" {
-  description = "Enable versioning on the S3 bucket"
-  type        = bool
-  default     = true
+    description = "enabling versioning"
+    type = bool
 }
 
 variable "sse_algorithm" {
-  description = "Server-side encryption algorithm (e.g., AES256 or aws:kms)"
-  type        = string
-  default     = "AES256"
+    description = "encrypt s3 data"
+    type = string
 }
 
 variable "tags" {
-  description = "Tags to apply to the S3 bucket"
-  type        = map(string)
-  default     = {}
+    description = "maps of tags"
+    type        = map(string)
+    default     = {}
 }
 
 variable "organization" {
@@ -30,6 +28,7 @@ variable "team" {
   description = "Team or project name"
   type        = string
 }
+
 variable "env" {
   description = "Deployment environment (dev, uat, prod)"
   type        = string
@@ -40,3 +39,7 @@ variable "resource_type" {
   type        = string
   default     = "s3"
 }
+
+
+
+
