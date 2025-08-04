@@ -1,4 +1,4 @@
-name: Terraform CI/CD with tfsec and SonarQube
+name: Terraform CI/CD with KICS Scanner and SonarQube
 
 on:
   push:
