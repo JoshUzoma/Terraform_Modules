@@ -109,8 +109,8 @@ jobs:
         run: |
           cd ${{ matrix.folder }}
           sonar-scanner \
-            -Dsonar.projectKey=htown-sp-sonarqube-${{ matrix.folder }} \
-            -Dsonar.projectName=htown-sp-sonarqube-${{ matrix.folder }} \
+            -Dsonar.projectKey=$PROJECT_NAME-${{ matrix.folder }} \
+            -Dsonar.projectName=$PROJECT_NAME-${{ matrix.folder }} \
             -Dsonar.sources=. \
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
             -Dsonar.token=$SONAR_TOKEN \
