@@ -2,16 +2,21 @@ locals {
   # Construct standardized resource name
   # Format: organization-team-resource name-environment (e.g., tomss-sp-lambda-dev)
 
-  resource_name = "${var.organization}-${var.team}-${var.name}-${var.environment}"
+  bucket_name = "${var.organization}-${var.team}-${var.resource_type}-${var.purpose}-${var.env}"
   
-  # Default tags to apply to all resources in this module
-  default_tags = merge(
-  {
-    Name        = local.bucket_name
+# Default tags applied to resources
+
+  default_tags = {
+    "dea:application:name"  = "dccc"
+    "dea:cost-allocation:businessunit" =  "drt"
+    "dea:operations:team"  =  "diversion"
+    "dea:application:owner"  = "andrea mcclain"
+    "dea:automation:environment"  = "pre-prod"
     ManagedBy   = "Terraform"
-    Team        = var.team
     Environment = var.env
-  },
-  var.tags
- )
+    Team        = var.team
+  }
+  
+  all_tags = local.default_tags
+
 }

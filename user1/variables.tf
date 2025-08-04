@@ -13,12 +13,6 @@ variable "sse_algorithm" {
     type = string
 }
 
-variable "tags" {
-    description = "maps of tags"
-    type        = map(string)
-    default     = {}
-}
-
 variable "organization" {
   description = "Company or organization prefix"
   type        = string

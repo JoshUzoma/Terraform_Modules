@@ -1,10 +1,6 @@
-provider "aws" {
-  region = var.aws_region
-}
-
 resource "aws_s3_bucket" "this" {
   bucket = local.bucket_name
-  tags   = local.default_tags
+  tags   = local.all_tags
 }
 
 resource "aws_s3_bucket_versioning" "this" {
