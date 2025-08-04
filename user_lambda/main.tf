@@ -1,4 +1,4 @@
-#v4
+#v5
 module "lambda_functions" {
   source = "../modules/lambda"
   for_each = var.lambda_functions
