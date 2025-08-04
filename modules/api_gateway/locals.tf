@@ -1,14 +1,18 @@
 locals {
-  # Construct standardized resource name
-  # Format: company-team-name-environment (e.g., sp-dccc-lambda-dev)
+  # Standard naming convention for Api Gateway name
+  api_name = var.api_name != "" ? var.api_name : "${var.organization}-${var.team}-${var.resource_type}-${var.purpose}-${var.env}"
 
-  resource_name = "${var.company}-${var.team}-${var.name}-${var.environment}"
-  
-  # Default tags to apply to all resources in this module
+  # Default tags applied to all Api Gateway
   default_tags = {
-    Name        = local.resource_name
-    Company     = var.company
+    "dea:application:name"  = "dccc"
+    "dea:cost-allocation:businessunit" =  "drt"
+    "dea:operations:team"  =  "diversion"
+    "dea:application:owner"  = "andrea mcclain"
+    "dea:automation:environment"  = "pre-prod"
+    ManagedBy   = "Terraform"
+    Environment = var.env
     Team        = var.team
-    Environment = var.environment
   }
+
+  all_tags = local.default_tags
 }
