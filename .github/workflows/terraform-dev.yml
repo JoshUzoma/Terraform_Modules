@@ -9,9 +9,9 @@ on:
   
 env:
       AWS_REGION: us-east-2
-      KICS_S3_BUCKET: kics-log-bucket
-      SQ_S3_BUCKET: sq-log-bucket
-      PROJECT_NAME: htown-sp-sonarqube
+      KICS_S3_BUCKET: kics-dev-bucket
+      SQ_S3_BUCKET: sonarqube-log-bucket
+      PROJECT_NAME: dea-diversions-sp-sonarqube
 jobs:
   detect-folders:
     runs-on: ubuntu-latest
