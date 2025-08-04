@@ -2,9 +2,13 @@ name: Terraform CI/CD with tfsec and SonarQube
 
 on:
   push:
-    branches: [main]
+    branches: [dev]
     paths:
-      - 'user*/**'  # Triggers if any user folder changes
+      - 'user*/**'  # Triggers if any user folder is modified
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'user*/**' 
   workflow_dispatch:  # Manual trigger
   
 env:
