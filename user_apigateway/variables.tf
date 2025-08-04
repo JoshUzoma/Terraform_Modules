@@ -25,49 +25,12 @@ variable "resource_type" {
 }
 
 variable "purpose" {
-  description = "Functional purpose of the Lambda"
+  description = "Functional purpose of the Api Gateway"
   type        = string
 }
-
-variable "api_name" {
-  type        = string
-  description = "API Gateway name override"
-  default     = ""
-}
-
 variable "stage_name" {
   description = "Deployment stage name (e.g., dev, uat, prod)"
   type        = string
-}
-
-variable "routes" {
-  description = "List of route objects with path, method, and Lambda ARN"
-  type = list(object({
-    path       = string
-    method     = string
-    lambda_arn = string
-  }))
-}
-
-variable "authorizer_config" {
-  description = "Configuration for API Gateway authorizer"
-  type = object({
-    type             = string
-    authorizer_uri   = optional(string)
-    identity_sources = list(string)
-    audience         = optional(list(string))
-    issuer           = optional(string)
-  })
-  default = null
-}
-
-variable "logging_config" {
-  description = "CloudWatch logging settings"
-  type = object({
-    destination_arn = string
-    format          = string
-    logging_level   = string
-  })
 }
 
 variable "cors_config" {

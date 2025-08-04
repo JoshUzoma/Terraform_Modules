@@ -78,6 +78,22 @@ variable "environment_variables" {
   default     = {}
 }
 
+variable "create_layer" {
+  description = "Whether to create a Lambda Layer"
+  type        = bool
+  default     = false
+}
 
+variable "layer_zip" {
+  description = "Path to the layer zip file"
+  type        = string
+  default     = ""
+}
+
+variable "layers" {
+  description = "Optional list of layer ARNs to attach"
+  type        = list(string)
+  default     = []
+}
 
 

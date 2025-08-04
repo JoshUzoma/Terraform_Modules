@@ -25,7 +25,7 @@ variable "resource_type" {
 }
 
 variable "purpose" {
-  description = "Functional purpose of the Lambda"
+  description = "Functional purpose of the Api Gateway"
   type        = string
 }
 
@@ -36,23 +36,13 @@ variable "key_name" {
 }
 
 variable "instance_name" {
-  description = "Optional override for EC2 instance name. If empty, name is built from organization, team, resource_type, purpose, and env."
   type        = string
+  description = "Optional override for EC2 instance name"
   default     = ""
 }
 
 variable "instances" {
-  description = <<EOF
-Map of EC2 instance definitions.
-Each key is the instance name.
-Each value should include:
-- ami_id
-- instance_type
-- subnet_id
-- security_group_ids (list)
-- user_data
-- tags (map)
-EOF
+  description = "Map of EC2 instances to deploy for SonarQube"
   type = map(object({
     ami_id              = string
     instance_type       = string

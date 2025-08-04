@@ -13,5 +13,12 @@ lambda_functions = {
     environment_variables = {
       STAGE = "dev"
     }
+    # Test Layer creation
+    create_layer = true
+    layer_zip    = "build/common_layer.zip"  # path to zipped layer
+    
+    #Attach additional layers if needed
+    layers = []
+
   }
 }

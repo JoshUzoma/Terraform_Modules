@@ -23,6 +23,9 @@ variable "lambda_functions" {
     filename              = string
     role_arn              = string
     environment_variables = map(string)
+    create_layer          = optional(bool)
+    layer_zip             = optional(string)
+    layers                = optional(list(string))
   }))
 }
 
