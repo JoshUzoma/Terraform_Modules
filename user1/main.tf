@@ -1,3 +1,4 @@
+#v2
 locals {
   s3_buckets = {
     raw = {
