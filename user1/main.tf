@@ -1,8 +1,8 @@
-#v5
+#v7
 locals {
   s3_buckets = {
-    raw = {
-      purpose = "raw"
+    josho = {
+      purpose = "josho"
     }
     processed = {
       purpose = "processed"
