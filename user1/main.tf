@@ -1,4 +1,4 @@
-#v5
+#v6
 locals {
   s3_buckets = {
     josho = {
