@@ -16,6 +16,8 @@ env:
       KICS_S3_BUCKET: kics-dev-bucket
       SQ_S3_BUCKET: sonarqube-log-bucket
       PROJECT_NAME: dea-diversions-sp-sonarqube
+      LAMBDA_ARTIFACT_BUCKET: htown-dev-lambda-artifacts
+      
 jobs:
   detect-folders:
     runs-on: ubuntu-latest
@@ -58,7 +60,6 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}  # Make this env variable
           
       # Static Code Scanning (Before Apply)
-      
       - name: Run KICS Scan
         uses: checkmarx/kics-github-action@v2.1.11
         with:
@@ -86,16 +87,16 @@ jobs:
             echo "No KICS results found to upload."
           fi
           
-      # Uncomment this block to enforce security gates before apply
-      # - name: Fail on critical/high KICS issues
-      #   run: |
-      #     count=$(jq '[.queries[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' ${{ matrix.folder }}/kics-output/results.json)
-      #     echo "High/Critical findings: $count"
-      #     if [ "$count" -gt 0 ]; then
-      #       echo "High/Critical KICS findings — failing CI"
-      #       exit 1
-      #     fi
-      
+       # Enforce security gates before apply
+      - name: Fail on critical/high KICS issues
+        run: |
+           count=$(jq '[.queries[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' ${{ matrix.folder }}/kics-output/results.json)
+           echo "High/Critical findings: $count"
+           if [ "$count" -gt 0 ]; then
+             echo "High/Critical KICS findings — failing CI"
+             exit 1
+           fi
+           
       - name: Install SonarScanner
         run: |
           wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
@@ -104,13 +105,15 @@ jobs:
           echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
           
       - name: Run SonarQube Scan
+        id: sonar_scan
+        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           cd ${{ matrix.folder }}
           sonar-scanner \
-            -Dsonar.projectKey=${{ env.PROJECT_NAME }}-${{ matrix.folder }} \
-            -Dsonar.projectName=${{ env.PROJECT_NAME }}-${{ matrix.folder }} \
+            -Dsonar.projectKey=htown-sp-sonarqube-${{ matrix.folder }} \
+            -Dsonar.projectName=htown-sp-sonarqube-${{ matrix.folder }} \
             -Dsonar.sources=. \
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
             -Dsonar.token=$SONAR_TOKEN \
@@ -119,8 +122,18 @@ jobs:
             -Dsonar.scm.disabled=false \
             -Dsonar.qualitygate.wait=true \
             -Dsonar.sourceEncoding=UTF-8 \
-            | tee sonarqube-output.log
-             
+            | tee ../sonarqube-output.log
+            
+      - name: Check SonarQube Quality Gate from log
+        run: |
+          echo "Checking for QUALITY GATE STATUS failure or EXECUTION FAILURE..."
+          if grep -q "QUALITY GATE STATUS: FAILED" sonarqube-output.log || grep -q "EXECUTION FAILURE" sonarqube-output.log; then
+            echo "SonarQube Quality Gate FAILED"
+            exit 1
+          else
+            echo "SonarQube Quality Gate PASSED"
+          fi
+          
       - name: Fetch SonarQube Issues
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -133,17 +146,67 @@ jobs:
       - name: Upload SonarQube Issues to S3
         run: |
           if [ -f sonarqube-results.json ]; then
-            aws s3 cp sonarqube-results.json s3://$SQ_S3_BUCKET/sonarqube/${{ matrix.folder }}/sonarqube-results.json
+            timestamp=$(date +%Y%m%d-%H%M%S)
+            echo "Uploading SonarQube results for ${{ matrix.folder }} to S3..."
+            aws s3 cp sonarqube-results.json \
+              "s3://$SQ_S3_BUCKET/sonarqube/${{ matrix.folder }}/$timestamp/sonarqube-results.json"
           else
             echo "Issues file not found, skipping upload."
           fi
           
       # Terraform Execution (After Approval)
-      - name: Zip Lambda Code if applicable
+      - name: Zip Lambda Code and Layer (if applicable)
         run: |
           cd ${{ matrix.folder }}
-          mkdir -p build
-          zip -r build/test_lambda.zip . -x "*.tf" -x "*.tfvars" -x "build/*" -x ".terraform/*" || echo "No files to zip"
+          if [ -d python ] || [ -d layers ]; then
+            mkdir -p build
+          fi
+          if [ -d lambdas ]; then
+            for dir in lambdas/*; do
+              [ -d "$dir" ] || continue  # Skip non-directories
+              name=$(basename "$dir")
+              zip -r "build/${name}.zip" "$dir"
+            done
+          fi
+          if [ -d layers ]; then
+            for dir in layers/*; do
+              [ -d "$dir" ] || continue
+              name=$(basename "$dir")
+              zip -r "build/${name}_layer.zip" "$dir"
+            done
+          fi
+          
+      - name: Upload Artifacts to S3 and Generate Hashes (if applicable)
+        run: |
+          cd ${{ matrix.folder }}
+          mkdir -p tfvars_out
+          echo '{ "lambda_functions": {' > tfvars_out/source_code.tfvars.json
+          first=1
+          if compgen -G "build/*.zip" > /dev/null; then
+            for zip in build/*.zip; do
+              name=$(basename "$zip" .zip)
+              # Skip layer zip files (ending in _layer.zip)
+              if [[ "$name" == *_layer ]]; then
+                continue
+             fi
+             hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
+             # Upload to S3
+             aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/$zip"
+             if [ $first -eq 1 ]; then
+               first=0
+             else
+               echo "," >> tfvars_out/source_code.tfvars.json
+             fi
+             echo "  \"$name\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
+           done
+          fi
+          echo "} }" >> tfvars_out/source_code.tfvars.json
+          
+      - name: Upload tfvars_out to Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfvars-${{ matrix.folder }}
+          path: ${{ matrix.folder }}/tfvars_out/source_code.tfvars.json
           
       - name: Terraform Init
         run: terraform init
@@ -154,12 +217,12 @@ jobs:
         working-directory: ${{ matrix.folder }}
         
       - name: Terraform Plan
-        run: terraform plan -var-file="vars/dev.tfvars"
+        run: terraform plan -var-file="vars/dev.tfvars" -var-file="tfvars_out/source_code.tfvars.json"
         working-directory: ${{ matrix.folder }}
         
   terraform-apply:
     name: Terraform Apply
-    needs: detect-folders
+    needs: [run-ci, detect-folders]
     runs-on: ubuntu-latest
     environment:
       name: dev-apply  #This triggers manual approval
@@ -180,8 +243,18 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
           
+      - name: Download tfvars_out from Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfvars-${{ matrix.folder }}
+          path: ${{ matrix.folder }}/tfvars_out
+          
       - name: Terraform Init
         run: terraform init
+        working-directory: ${{ matrix.folder }}
+        
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -var-file="vars/dev.tfvars" -var-file="tfvars_out/source_code.tfvars.json"
         working-directory: ${{ matrix.folder }}
         
       - name: Terraform Apply
