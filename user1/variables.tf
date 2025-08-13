@@ -4,13 +4,13 @@ variable "aws_region" {
 }
 
 variable "enable_versioning" {
-    description = "enabling versioning"
-    type = bool
+  description = "enabling versioning"
+  type        = bool
 }
 
 variable "sse_algorithm" {
-    description = "encrypt s3 data"
-    type = string
+  description = "encrypt s3 data"
+  type        = string
 }
 
 variable "organization" {
