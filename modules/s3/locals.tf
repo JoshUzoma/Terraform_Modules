@@ -2,7 +2,7 @@ locals {
   # Construct standardized resource name
   # Format: organization-team-resource name-environment (e.g., tomss-sp-lambda-dev)
 
-  bucket_name = "${var.organization}-${var.team}-${var.resource_type}-${var.purpose}-${var.env}"
+  bucket_name = "${var.organization}-${var.team}-${var.env}-${var.purpose}"
   
 # Default tags applied to resources
 

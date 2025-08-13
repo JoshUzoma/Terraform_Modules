@@ -1,6 +1,6 @@
 locals {
   # Standard naming convention for Lambda function name
-  lambda_name = var.lambda_name != "" ? var.lambda_name : "${var.organization}-${var.team}-${var.resource_type}-${var.purpose}-${var.env}"
+  lambda_name = var.lambda_name != "" ? var.lambda_name : "${var.organization}-${var.team}-${var.env}-${var.purpose}"
 
   # Default tags applied to all Lambda resources
   default_tags = {
