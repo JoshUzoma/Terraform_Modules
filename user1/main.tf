@@ -1,18 +1,18 @@
-#v12
+#v13
 
 locals {
   s3_buckets = {
-    uzo        = { purpose = "uzo" }
-    processed  = { purpose = "processed"  }
-    logs       = { purpose = "logs"  }
-    data       = { purpose = "data"  }
+    uzo       = { purpose = "uzo" }
+    processed = { purpose = "processed" }
+    logs      = { purpose = "logs" }
+    data      = { purpose = "data" }
   }
 }
 
 module "s3_raw_data" {
-  source            = "../modules/s3"
-  for_each          = local.s3_buckets
-  
+  source   = "../modules/s3"
+  for_each = local.s3_buckets
+
   purpose           = each.value.purpose
   resource_type     = var.resource_type
   aws_region        = var.aws_region
