@@ -1,4 +1,4 @@
-#v6
+#v7
 module "lambda_functions" {
   source = "../modules/lambda"
   for_each = local.lambda_configs
