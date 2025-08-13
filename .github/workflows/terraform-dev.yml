@@ -12,7 +12,7 @@ env:
       KICS_S3_BUCKET: kics-dev-bucket
       SQ_S3_BUCKET: sonarqube-log-bucket
       PROJECT_NAME: dea-diversions-sp-sonarqube
-      LAMBDA_ARTIFACT_BUCKET: htown-dev-lambda-artifacts
+      LAMBDA_ARTIFACT_BUCKET: josh-dev-lambda-artifacts
       
 jobs:
   detect-folders:
@@ -40,6 +40,7 @@ jobs:
         folder: ${{ fromJson(needs.detect-folders.outputs.folders) }}
     outputs:
       folder: ${{ matrix.folder }}
+      
     steps:
       - uses: actions/checkout@v4
         with:
@@ -123,6 +124,7 @@ jobs:
       - name: Check SonarQube Quality Gate from log
         run: |
           echo "Checking for QUALITY GATE STATUS failure or EXECUTION FAILURE..."
+          
           if grep -q "QUALITY GATE STATUS: FAILED" sonarqube-output.log || grep -q "EXECUTION FAILURE" sonarqube-output.log; then
             echo "SonarQube Quality Gate FAILED"
             exit 1
@@ -150,53 +152,169 @@ jobs:
             echo "Issues file not found, skipping upload."
           fi
           
-      # Terraform Execution (After Approval)
-      - name: Zip Lambda Code and Layer (if applicable)
+      - name: Detect lambda content
+        id: detect-lambda
         run: |
           cd ${{ matrix.folder }}
           if [ -d python ] || [ -d layers ]; then
-            mkdir -p build
+            echo "has_lambda=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_lambda=false" >> $GITHUB_OUTPUT
           fi
-          if [ -d lambdas ]; then
-            for dir in lambdas/*; do
-              [ -d "$dir" ] || continue  # Skip non-directories
+          
+      # Terraform Execution (After Approval)
+      
+      - name: Zip Lambda code and layers (reproducible)
+        if: steps.detect-lambda.outputs.has_lambda == 'true'
+        run: |
+          set -euo pipefail
+          cd ${{ matrix.folder }}
+          mkdir -p build
+          normalize_dir() {
+            local dir="$1"
+            # Normalize mtimes of tracked files so zip timestamps are stable
+            if git ls-files "$dir" >/dev/null 2>&1; then
+              git ls-files "$dir" | xargs -I{} touch -t 200001010000 {}
+            else
+              # Fallback if directory isn’t tracked (rare)
+              find "$dir" -type f -print0 | xargs -0 -I{} touch -t 200001010000 {}
+            fi
+          }
+          
+          make_zip() {
+            # make_zip <src_dir> <zip_out>
+            local src="$1"
+            local out="$2"
+            # Build a sorted list of files, excluding noise
+            mapfile -t files < <(cd "$src" && \
+              find . -type f \
+                ! -path "*/__pycache__/*" \
+                ! -name "*.pyc" \
+                ! -path "*/.DS_Store" \
+                ! -path "*/.venv/*" \
+              | LC_ALL=C sort)
+            # Create the zip with stable attrs (-X) and deterministic file order
+            rm -f "$out"
+            (cd "$src" && zip -X -q "$OLDPWD/$out" "${files[@]}")
+          }
+          
+          if [ -d python ]; then
+            for dir in python/*; do
+              [ -d "$dir" ] || continue
               name=$(basename "$dir")
-              zip -r "build/${name}.zip" "$dir"
+              normalize_dir "$dir"
+              make_zip "$dir" "build/${name}.zip"
             done
           fi
+          
           if [ -d layers ]; then
             for dir in layers/*; do
               [ -d "$dir" ] || continue
               name=$(basename "$dir")
-              zip -r "build/${name}_layer.zip" "$dir"
+              normalize_dir "$dir"
+              make_zip "$dir" "build/${name}_layer.zip"
             done
           fi
           
-      - name: Upload Artifacts to S3 and Generate Hashes (if applicable)
+          echo "Built zips:"; ls -l build || true
+
+      - name: Upload artifacts and write overrides (gated by content hash)
+        if: steps.detect-lambda.outputs.has_lambda == 'true'
+        run: |
+          set -euo pipefail
+          cd ${{ matrix.folder }}
+          mkdir -p tfvars_out
+          
+          BUCKET="${{ env.LAMBDA_ARTIFACT_BUCKET }}"
+          CHECKSUM_PREFIX="checksums"  # S3 folder to store per-function content hashes
+          
+          # Compute a stable content hash from source files under python/<func> (paths + file contents)
+          content_hash() {
+            local dir="$1"   # e.g., python/data_cleaner
+            mapfile -t files < <(cd "$dir" && \
+              find . -type f \
+                ! -path "*/__pycache__/*" \
+                ! -name "*.pyc" \
+                ! -path "*/.DS_Store" \
+                ! -path "*/.venv/*" \
+              | LC_ALL=C sort)
+            if [ "${#files[@]}" -eq 0 ]; then echo "EMPTY"; return; fi
+            tmp=$(mktemp)
+            (
+              cd "$dir"
+              for f in "${files[@]}"; do
+                printf "%s\0" "$f"
+                openssl dgst -sha256 -binary "$f" | openssl base64 -A
+                printf "\n"
+              done
+            ) > "$tmp"
+            openssl dgst -sha256 -binary "$tmp" | openssl base64 -A
+            rm -f "$tmp"
+          }
+          
+          # Upload layers (no TF hash needed)
+          if compgen -G "build/*_layer.zip" > /dev/null; then
+            for zip in build/*_layer.zip; do
+              base="$(basename "$zip" .zip)"; name="${base%_layer}"
+              aws s3 cp "$zip" "s3://${BUCKET}/layers/${name}.zip"
+            done
+          fi
+          
+          echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
+          first=1
+          
+          # For each function zip, compare source content hash to prior run; only emit TF hash on change
+          if compgen -G "build/*.zip" > /dev/null; then
+            for zip in build/*.zip; do
+              base="$(basename "$zip" .zip)"
+              [[ "$base" == *_layer ]] && continue
+              func="$base"
+              src_dir="python/${func}"
+              
+              if [ ! -d "$src_dir" ]; then
+                # Fallback: no source dir found — upload & emit once
+                aws s3 cp "$zip" "s3://${BUCKET}/lambdas/${base}.zip"
+                zip_hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
+                if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
+                echo "  \"${func}\": { \"source_code_hash\": \"${zip_hash}\" }" >> tfvars_out/source_code.tfvars.json
+                continue
+              fi
+              
+              new_ch=$(content_hash "$src_dir") || new_ch=""
+              old_ch=""
+              if aws s3 cp "s3://${BUCKET}/${CHECKSUM_PREFIX}/${func}.sha256" /tmp/prev.sha256 2>/dev/null; then
+                old_ch="$(cat /tmp/prev.sha256 || true)"
+              fi
+              
+              if [ -n "$new_ch" ] && [ "$new_ch" = "$old_ch" ]; then
+                echo "No source change for ${func}; uploading zip but NOT emitting TF hash."
+                aws s3 cp "$zip" "s3://${BUCKET}/lambdas/${base}.zip"
+              else
+                echo "Source change for ${func}; uploading & emitting TF hash."
+                aws s3 cp "$zip" "s3://${BUCKET}/lambdas/${base}.zip"
+                zip_hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
+                if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
+                echo "  \"${func}\": { \"source_code_hash\": \"${zip_hash}\" }" >> tfvars_out/source_code.tfvars.json
+                # Save new content hash for next run
+                printf "%s" "$new_ch" > /tmp/new.sha256
+                aws s3 cp /tmp/new.sha256 "s3://${BUCKET}/${CHECKSUM_PREFIX}/${func}.sha256" >/dev/null
+              fi
+            done
+          else
+            echo "ERROR: no function zips found in build/" >&2
+            exit 1
+          fi
+          
+          echo "} }" >> tfvars_out/source_code.tfvars.json
+          echo "=== overrides JSON ==="
+          cat tfvars_out/source_code.tfvars.json
+          
+      - name: Write empty overrides (no Lambda in this folder)
+        if: steps.detect-lambda.outputs.has_lambda != 'true'
         run: |
           cd ${{ matrix.folder }}
           mkdir -p tfvars_out
-          echo '{ "lambda_functions": {' > tfvars_out/source_code.tfvars.json
-          first=1
-          if compgen -G "build/*.zip" > /dev/null; then
-            for zip in build/*.zip; do
-              name=$(basename "$zip" .zip)
-              # Skip layer zip files (ending in _layer.zip)
-              if [[ "$name" == *_layer ]]; then
-                continue
-             fi
-             hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
-             # Upload to S3
-             aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/$zip"
-             if [ $first -eq 1 ]; then
-               first=0
-             else
-               echo "," >> tfvars_out/source_code.tfvars.json
-             fi
-             echo "  \"$name\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
-           done
-          fi
-          echo "} }" >> tfvars_out/source_code.tfvars.json
+          echo '{ "source_code_hashes": {} }' > tfvars_out/source_code.tfvars.json
           
       - name: Upload tfvars_out to Artifact
         uses: actions/upload-artifact@v4
@@ -251,8 +369,4 @@ jobs:
         
       - name: Terraform Apply
         run: terraform apply -auto-approve -var-file="vars/dev.tfvars" -var-file="tfvars_out/source_code.tfvars.json"
-        working-directory: ${{ matrix.folder }}
-        
-      - name: Terraform Apply
-        run: terraform apply -auto-approve -var-file="vars/dev.tfvars"
         working-directory: ${{ matrix.folder }}
