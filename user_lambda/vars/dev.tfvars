@@ -11,7 +11,7 @@ lambda_functions = {
     purpose      = "indexing"
     handler      = "index.handler"
     runtime      = "python3.9"
-    role_arn     = ""
+    role_arn     = "arn:aws:iam::051826731160:role/josh-sp-iam-etl-dev"
     environment_variables = {
       STAGE = "dev"
     }
@@ -26,7 +26,7 @@ my_new_lambda = {
     purpose      = "new_lambda"
     handler      = "new.handler"
     runtime      = "python3.9"
-    role_arn     = ""
+    role_arn     = "arn:aws:iam::051826731160:role/josh-sp-iam-etl-dev"
     environment_variables = {
       STAGE = "dev"
     }
