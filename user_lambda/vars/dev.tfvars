@@ -3,22 +3,38 @@ team         = "sp"
 env          = "dev"
 aws_region   = "us-east-2"
 
+
+lambda_artifact_bucket = "josh-dev-lambda-artifacts"  # S3 bucket where CI/CD stores Lambda & layer zips
+
 lambda_functions = {
-  etl_transform = {
-    purpose      = "transform"
-    handler      = "etl.handler"
+   digest_index = {
+    purpose      = "indexing"
+    handler      = "index.handler"
     runtime      = "python3.9"
-    filename     = "build/test_lambda.zip"
-    role_arn     = "arn:aws:iam::051826731160:role/josh-sp-iam-etl-dev"
+    role_arn     = ""
     environment_variables = {
       STAGE = "dev"
     }
-    # Test Layer creation
-    create_layer = true
-    layer_zip    = "build/common_layer.zip"  # path to zipped layer
-    
-    #Attach additional layers if needed
-    layers = []
-
+    s3_key            = "lambdas/digest_index.zip"
+    #source_code_hash  = "REPLACE BY CICD"
+    create_layer      = true
+    layer_s3_key      = "layers/digest_index.zip"
+    layers            = []
+    s3_event          = null
+  }
+my_new_lambda = {
+    purpose      = "new_lambda"
+    handler      = "new.handler"
+    runtime      = "python3.9"
+    role_arn     = ""
+    environment_variables = {
+      STAGE = "dev"
+    }
+    s3_key            = "lambdas/my_new_lambda.zip"
+    #source_code_hash  = "REPLACE BY CICD"
+    create_layer      = false
+    layers            = [
+      "arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python39:30" ]
+    s3_event          = null
   }
 }
