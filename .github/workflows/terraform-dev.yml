@@ -1,10 +1,12 @@
 name: Terraform CI/CD with KICS Scanner and SonarQube
 
 on:
+#Trigger workflow on pushes to main branch, but only if user folders change
   push:
     branches: [main]
     paths:
       - 'user*/**'  # Triggers if any user folder is modified
+  # Allow manual trigger from GitHub Actions UI
   workflow_dispatch:  # Manual trigger
   
 env:
@@ -15,6 +17,10 @@ env:
       LAMBDA_ARTIFACT_BUCKET: josh-dev-lambda-artifacts
       
 jobs:
+
+  # ===============================
+  # 1. Detect which user folders changed
+  # ===============================
   detect-folders:
     runs-on: ubuntu-latest
     outputs:
@@ -22,14 +28,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-           fetch-depth: 0
+           fetch-depth: 0 # Full History for git diff
            
       - id: set-folders
         run: |
           echo "Detecting user folders with changes..."
           folders=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^user' | cut -d/ -f1 | sort -u | uniq | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "folders=$folders" >> $GITHUB_OUTPUT
-          
+
+  # ===============================
+  # 2. Run CI pipeline for each changed folder
+  # ===============================        
   run-ci:
     name: Run Terraform CI/CD
     needs: detect-folders
@@ -39,16 +48,19 @@ jobs:
       matrix:
         folder: ${{ fromJson(needs.detect-folders.outputs.folders) }}
     outputs:
-      folder: ${{ matrix.folder }}
-      
+      folder: ${{ matrix.folder }} 
     steps:
+
+      # --- Checkout repo
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
+      # --- Setup Terraform CLI    
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         
+      # --- Configure AWS credentials  
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -56,7 +68,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}  # Make this env variable
           
-      # Static Code Scanning (Before Apply)
+     # ===============================
+     # Security Scanning - KICS
+     # ===============================
       - name: Run KICS Scan
         uses: checkmarx/kics-github-action@v2.1.11
         with:
@@ -93,7 +107,10 @@ jobs:
              echo "High/Critical KICS findings — failing CI"
              exit 1
            fi
-           
+
+     # ===============================
+     # Security Scanning - SonarQube
+     # ===============================     
       - name: Install SonarScanner
         run: |
           wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
@@ -121,6 +138,7 @@ jobs:
             -Dsonar.sourceEncoding=UTF-8 \
             | tee ../sonarqube-output.log
             
+      # --- Fail if Quality Gate fails      
       - name: Check SonarQube Quality Gate from log
         run: |
           echo "Checking for QUALITY GATE STATUS failure or EXECUTION FAILURE..."
@@ -132,6 +150,7 @@ jobs:
             echo "SonarQube Quality Gate PASSED"
           fi
           
+      # --- Pull SonarQube issues list via API and store in S3   
       - name: Fetch SonarQube Issues
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -151,7 +170,10 @@ jobs:
           else
             echo "Issues file not found, skipping upload."
           fi
-          
+
+      # ---------------------------------------------------------
+      # Step 1: Detect if this folder has any Lambda-related code
+      # ---------------------------------------------------------   
       - name: Detect lambda content
         id: detect-lambda
         run: |
@@ -162,14 +184,17 @@ jobs:
             echo "has_lambda=false" >> $GITHUB_OUTPUT
           fi
           
-      # Terraform Execution (After Approval)
-      
+      # ---------------------------------------------------------
+      # Step 2: Zip Lambda function code and/or layer code
+      # ---------------------------------------------------------
       - name: Zip Lambda code and layers (reproducible)
         if: steps.detect-lambda.outputs.has_lambda == 'true'
         run: |
           set -euo pipefail
           cd ${{ matrix.folder }}
           mkdir -p build
+
+          # Function to normalize file modification times for reproducibility
           normalize_dir() {
             local dir="$1"
             # Normalize mtimes of tracked files so zip timestamps are stable
@@ -180,7 +205,8 @@ jobs:
               find "$dir" -type f -print0 | xargs -0 -I{} touch -t 200001010000 {}
             fi
           }
-          
+
+          # Function to zip contents of a directory in a stable, sorted way
           make_zip() {
             # make_zip <src_dir> <zip_out>
             local src="$1"
@@ -197,7 +223,8 @@ jobs:
             rm -f "$out"
             (cd "$src" && zip -X -q "$OLDPWD/$out" "${files[@]}")
           }
-          
+
+          #Zip each Lambda function under python/
           if [ -d python ]; then
             for dir in python/*; do
               [ -d "$dir" ] || continue
@@ -206,7 +233,8 @@ jobs:
               make_zip "$dir" "build/${name}.zip"
             done
           fi
-          
+
+          # Zip each Lambda layer under layers/
           if [ -d layers ]; then
             for dir in layers/*; do
               [ -d "$dir" ] || continue
@@ -217,7 +245,10 @@ jobs:
           fi
           
           echo "Built zips:"; ls -l build || true
-
+          
+      # ---------------------------------------------------------
+      # Step 3: Upload artifacts to S3 and decide if TF should redeploy
+      # ---------------------------------------------------------
       - name: Upload artifacts and write overrides (gated by content hash)
         if: steps.detect-lambda.outputs.has_lambda == 'true'
         run: |
@@ -252,14 +283,15 @@ jobs:
             rm -f "$tmp"
           }
           
-          # Upload layers (no TF hash needed)
+          # Upload and Lambda layers to S3 (no TF redeploy needed for layers)
           if compgen -G "build/*_layer.zip" > /dev/null; then
             for zip in build/*_layer.zip; do
               base="$(basename "$zip" .zip)"; name="${base%_layer}"
               aws s3 cp "$zip" "s3://${BUCKET}/layers/${name}.zip"
             done
           fi
-          
+
+          # Prepare overrides JSON for Terraform
           echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
           first=1
           
@@ -279,7 +311,8 @@ jobs:
                 echo "  \"${func}\": { \"source_code_hash\": \"${zip_hash}\" }" >> tfvars_out/source_code.tfvars.json
                 continue
               fi
-              
+
+              # Compare new source hash to old one stored in S3
               new_ch=$(content_hash "$src_dir") || new_ch=""
               old_ch=""
               if aws s3 cp "s3://${BUCKET}/${CHECKSUM_PREFIX}/${func}.sha256" /tmp/prev.sha256 2>/dev/null; then
@@ -308,14 +341,20 @@ jobs:
           echo "} }" >> tfvars_out/source_code.tfvars.json
           echo "=== overrides JSON ==="
           cat tfvars_out/source_code.tfvars.json
-          
+
+      # ---------------------------------------------------------
+      # Step 4: If no Lambda code exists, make an empty overrides file
+      # ---------------------------------------------------------
       - name: Write empty overrides (no Lambda in this folder)
         if: steps.detect-lambda.outputs.has_lambda != 'true'
         run: |
           cd ${{ matrix.folder }}
           mkdir -p tfvars_out
           echo '{ "source_code_hashes": {} }' > tfvars_out/source_code.tfvars.json
-          
+
+      # ===============================
+      # Terraform Plan Stage
+      # ===============================
       - name: Upload tfvars_out to Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -333,13 +372,16 @@ jobs:
       - name: Terraform Plan
         run: terraform plan -var-file="vars/dev.tfvars" -var-file="tfvars_out/source_code.tfvars.json"
         working-directory: ${{ matrix.folder }}
-        
+
+  # ===============================
+  # Terraform Apply (manual approval)
+  # ===============================     
   terraform-apply:
     name: Terraform Apply
     needs: [run-ci, detect-folders]
     runs-on: ubuntu-latest
     environment:
-      name: dev-apply  #This triggers manual approval
+      name: dev-apply  # Manual approval in GitHub Environments
       url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     strategy:
       matrix:
