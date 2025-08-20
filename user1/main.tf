@@ -1,5 +1,4 @@
 #14
-
 locals {
   s3_buckets = {
     uzo       = { purpose = "uzo" }
