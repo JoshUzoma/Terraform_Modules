@@ -52,4 +52,20 @@ hello_world = {
       "arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python39:30" ]
     s3_event          = null
   }
+
+Salesforce = {
+    purpose      = "Sales"
+    handler      = "new.handler"
+    runtime      = "python3.9"
+    role_arn     = "arn:aws:iam::051826731160:role/josh-sp-iam-etl-dev"
+    environment_variables = {
+      STAGE = "dev"
+    }
+    s3_key            = "lambdas/Salesforce.zip"
+    #source_code_hash  = "REPLACE BY CICD"
+    create_layer      = false
+    layers            = [
+      "arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python39:30" ]
+    s3_event          = null
+  }
 }

@@ -1,13 +1,4 @@
 #14
-locals {
-  s3_buckets = {
-    uzo       = { purpose = "uzo" }
-    processed = { purpose = "processed" }
-    logs      = { purpose = "logs" }
-    data      = { purpose = "data" }
-  }
-}
-
 module "s3_raw_data" {
   source   = "../modules/s3"
   for_each = local.s3_buckets
@@ -20,4 +11,13 @@ module "s3_raw_data" {
   organization      = var.organization
   env               = var.env
   team              = var.team
+}
+
+locals {
+  s3_buckets = {
+    uzo       = { purpose = "uzo" }
+    processed = { purpose = "processed" }
+    logs      = { purpose = "logs" }
+    data      = { purpose = "data" }
+  }
 }
