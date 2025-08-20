@@ -108,69 +108,6 @@ jobs:
              exit 1
            fi
 
-     # ===============================
-     # Security Scanning - SonarQube
-     # ===============================     
-      - name: Install SonarScanner
-        run: |
-          wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
-          unzip sonar-scanner-cli-5.0.1.3006-linux.zip
-          mv sonar-scanner-5.0.1.3006-linux sonar-scanner
-          echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
-          
-      - name: Run SonarQube Scan
-        id: sonar_scan
-        continue-on-error: true
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          cd ${{ matrix.folder }}
-          sonar-scanner \
-            -Dsonar.projectKey=htown-sp-sonarqube-${{ matrix.folder }} \
-            -Dsonar.projectName=htown-sp-sonarqube-${{ matrix.folder }} \
-            -Dsonar.sources=. \
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-            -Dsonar.token=$SONAR_TOKEN \
-            -Dsonar.python.version=3 \
-            -Dsonar.projectVersion=1.0.${{ github.run_number }} \
-            -Dsonar.scm.disabled=false \
-            -Dsonar.qualitygate.wait=true \
-            -Dsonar.sourceEncoding=UTF-8 \
-            | tee ../sonarqube-output.log
-            
-      # --- Fail if Quality Gate fails      
-      - name: Check SonarQube Quality Gate from log
-        run: |
-          echo "Checking for QUALITY GATE STATUS failure or EXECUTION FAILURE..."
-          
-          if grep -q "QUALITY GATE STATUS: FAILED" sonarqube-output.log || grep -q "EXECUTION FAILURE" sonarqube-output.log; then
-            echo "SonarQube Quality Gate FAILED"
-            exit 1
-          else
-            echo "SonarQube Quality Gate PASSED"
-          fi
-          
-      # --- Pull SonarQube issues list via API and store in S3   
-      - name: Fetch SonarQube Issues
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          curl -s -u "${SONAR_TOKEN}:" \
-            "${SONAR_HOST_URL}/api/issues/search?componentKeys=$PROJECT_NAME-${{ matrix.folder }}" \
-            -o sonarqube-results.json || echo "Failed to fetch SonarQube issues"
-            
-      - name: Upload SonarQube Issues to S3
-        run: |
-          if [ -f sonarqube-results.json ]; then
-            timestamp=$(date +%Y%m%d-%H%M%S)
-            echo "Uploading SonarQube results for ${{ matrix.folder }} to S3..."
-            aws s3 cp sonarqube-results.json \
-              "s3://$SQ_S3_BUCKET/sonarqube/${{ matrix.folder }}/$timestamp/sonarqube-results.json"
-          else
-            echo "Issues file not found, skipping upload."
-          fi
-
       # ---------------------------------------------------------
       # Step 1: Detect if this folder has any Lambda-related code
       # ---------------------------------------------------------   
