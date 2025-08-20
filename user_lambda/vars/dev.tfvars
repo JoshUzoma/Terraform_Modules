@@ -37,4 +37,19 @@ my_new_lambda = {
       "arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python39:30" ]
     s3_event          = null
   }
+hello_world = {
+    purpose      = "hello"
+    handler      = "new.handler"
+    runtime      = "python3.9"
+    role_arn     = "arn:aws:iam::051826731160:role/josh-sp-iam-etl-dev"
+    environment_variables = {
+      STAGE = "dev"
+    }
+    s3_key            = "lambdas/hello_world.zip"
+    #source_code_hash  = "REPLACE BY CICD"
+    create_layer      = false
+    layers            = [
+      "arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python39:30" ]
+    s3_event          = null
+  }
 }
